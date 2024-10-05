@@ -7,6 +7,7 @@ TOTP Token Manager 是一个全栈应用程序，用于管理和生成基于时�
 - 添加、查看和删除TOTP令牌
 - 生成TOTP令牌
 - 导出和导入TOTP数据
+- 支持导入谷歌验证器二维码
 - 与GitHub Gist集成，用于备份和恢复
 - 响应式Web界面
 
