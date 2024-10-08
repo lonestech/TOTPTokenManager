@@ -5,6 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 kv_namespaces = [
   { binding = "TOTP_STORE", id = "你的kv空间id" },
+  { binding = "USER_STORE", id = "用户kv空间id" },
 ]
 
 
@@ -31,3 +32,6 @@ globs = ["**/*.js"]
 
 [build.upload.module_rules]
 "bcryptjs" = { type = "npm" }
+
+[observability]
+enabled = true

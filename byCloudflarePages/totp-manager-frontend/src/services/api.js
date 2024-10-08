@@ -1,11 +1,24 @@
 import axios from 'axios';
+import Cookies from 'js-cookie';
 import config from '../config';
 
 const api = axios.create({
     baseURL: config.API_BASE_URL,
 });
 
+api.interceptors.request.use((config) => {
+    const sessionToken = Cookies.get('sessionToken');
+    if (sessionToken) {
+        config.headers.Authorization = `Bearer ${sessionToken}`;
+    }
+    return config;
+});
+// 添加注册 API
+export const register = (username, password) => api.post('/api/register', { username, password });
 
+// 添加登录 API
+export const login = (username, password) => api.post('/api/login', { username, password });
+export const logout = () => api.post('/api/logout', {});
 export const getTOTPs = () => api.get('/api/totp');
 export const addTOTP = (userInfo, secret) => api.post('/api/totp', { userInfo, secret });
 export const deleteTOTP = (id) => api.delete(`/api/totp/${id}`);

@@ -1,19 +1,51 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Layout, Menu, Button, Table, Input, Upload, message, Modal, Popconfirm, Switch, Radio, List, Card, Typography, Space, Empty, Spin, Alert, Drawer } from 'antd';
-import { PlusOutlined, UploadOutlined, QrcodeOutlined, ClearOutlined, SyncOutlined, DeleteOutlined, MenuOutlined } from '@ant-design/icons';
-import { PageContainer } from '@ant-design/pro-layout';
-import { QRCodeSVG } from 'qrcode.react';
+import React, {useState, useEffect, useCallback, useMemo} from 'react';
+import {
+    Layout,
+    Menu,
+    Button,
+    Table,
+    Input,
+    Upload,
+    message,
+    Modal,
+    Popconfirm,
+    Switch,
+    Radio,
+    List,
+    Card,
+    Typography,
+    Space,
+    Empty,
+    Spin,
+    Alert,
+    Drawer
+} from 'antd';
+import {
+    PlusOutlined,
+    UploadOutlined,
+    QrcodeOutlined,
+    ClearOutlined,
+    SyncOutlined,
+    DeleteOutlined,
+    MenuOutlined,
+    UserOutlined,
+    LockOutlined
+} from '@ant-design/icons';
+import {PageContainer} from '@ant-design/pro-layout';
+import {QRCodeSVG} from 'qrcode.react';
 import jsQR from 'jsqr';
 import 'antd/dist/reset.css';
 import * as api from './services/api';
 import config from './config';
-import { useMediaQuery } from 'react-responsive';
+import Cookies from 'js-cookie';
 
-const { Header, Content, Footer } = Layout;
-const { Dragger } = Upload;
-const { Text } = Typography;
+import {useMediaQuery} from 'react-responsive';
 
-const CountdownTimer = React.memo(({ onComplete }) => {
+const {Header, Content, Footer} = Layout;
+const {Dragger} = Upload;
+const {Text} = Typography;
+
+const CountdownTimer = React.memo(({onComplete}) => {
     const [countdown, setCountdown] = useState(30);
 
     useEffect(() => {
@@ -37,7 +69,7 @@ const CountdownTimer = React.memo(({ onComplete }) => {
 
     return (
         <svg width="40" height="40" viewBox="0 0 40 40">
-            <circle cx="20" cy="20" r={radius} fill="none" stroke="#e6e6e6" strokeWidth="4" />
+            <circle cx="20" cy="20" r={radius} fill="none" stroke="#e6e6e6" strokeWidth="4"/>
             <circle
                 cx="20"
                 cy="20"
@@ -70,36 +102,101 @@ function App() {
     const [backupVersions, setBackupVersions] = useState([]);
     const [restoreModalVisible, setRestoreModalVisible] = useState(false);
     const [isLoadingBackups, setIsLoadingBackups] = useState(false);
-    const [importStatus, setImportStatus] = useState({ loading: false, count: 0 });
+    const [importStatus, setImportStatus] = useState({loading: false, count: 0});
     const [drawerVisible, setDrawerVisible] = useState(false);
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [isRegistering, setIsRegistering] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const handleRegister = useCallback(async () => {
+        if (!username || !password) {
+            message.warning('用户名和密码不能为空');
+            return;
+        }
+        try {
+            const response = await api.register(username, password);
+            console.log(response)
+            if (response.status === 201) {
+                // 如果注册后后端返回会话令牌，也进行保存
+                Cookies.set('sessionToken', response.data);
+                message.success('注册成功');
+                setIsRegistering(false);
+            } else {
+                throw new Error(response.data.error || '注册失败');
+            }
+        } catch (error) {
+            console.error('注册失败:', error);
+            message.error('注册失败: ' + error.message);
+        }
+    }, [username, password]);
 
-    const isDesktopOrLaptop = useMediaQuery({ minWidth: 1024 });
+    const handleLogin = useCallback(async () => {
+        if (!username || !password) {
+            message.warning('用户名和密码不能为空');
+            return;
+        }
+        try {
+            const response = await api.login(username, password);
+            console.log(response)
+            if (response.status === 200) {
+                // 保存会话令牌
+                Cookies.set('sessionToken', response.data.token);
+                message.success('登录成功');
+                setIsLoggedIn(true);
+            } else {
+                throw new Error(response.data.error || '登录失败');
+            }
+        } catch (error) {
+            console.error('登录失败:', error);
+            message.error('登录失败: ' + error.message);
+        }
+    }, [username, password]);
+    const handleLogout = useCallback(async () => {
+        try {
+            await api.logout();
+            Cookies.remove('sessionToken');
+            setIsLoggedIn(false);
+            setTotps([]);
+            setSyncEnabled(false);
+            setUserInfo('');
+            setPassword('');
+            message.success('已退出登录');
+        } catch (error) {
+            console.error('退出登录失败:', error);
+            message.error('退出登录失败');
+        }
+    }, []);
+
+    const isDesktopOrLaptop = useMediaQuery({minWidth: 1024});
 
     const loadTOTPs = useCallback(async () => {
+        if (!isLoggedIn) return;
         try {
-            console.log('开始加载TOTP列表');
             const response = await api.getTOTPs();
-            console.log('服务器返回的TOTP列表:', response.data);
             setTotps(response.data);
         } catch (error) {
             console.error('加载TOTP列表失败:', error);
             message.error('加载TOTP列表失败');
         }
-    }, []);
+    }, [isLoggedIn]);
 
     const checkAuthStatus = useCallback(async () => {
+        if (!isLoggedIn) return;
         try {
             const response = await api.getGithubAuthStatus();
-            setIsAuthenticated(response.data.authenticated);
             setSyncEnabled(response.data.authenticated);
         } catch (error) {
-            console.error('Failed to check auth status:', error);
+            console.error('Failed to check GitHub auth status:', error);
         }
-    }, []);
+    }, [isLoggedIn]);
 
     useEffect(() => {
-        loadTOTPs();
-        checkAuthStatus();
+        const sessionToken = Cookies.get('sessionToken');
+        if (sessionToken) {
+            setIsLoggedIn(true);
+            loadTOTPs();
+            checkAuthStatus();
+        }
     }, [loadTOTPs, checkAuthStatus]);
 
     const addTOTP = useCallback(async () => {
@@ -137,7 +234,7 @@ function App() {
             if (response.data.error) {
                 message.error(response.data.error);
             } else {
-                setTokens(prev => ({ ...prev, [id]: response.data.token }));
+                setTokens(prev => ({...prev, [id]: response.data.token}));
             }
         } catch (error) {
             console.error('令牌生成失败:', error);
@@ -289,7 +386,7 @@ function App() {
     }, []);
 
     const handleQRUpload = async (file) => {
-        setImportStatus({ loading: true, count: 0 });
+        setImportStatus({loading: true, count: 0});
         try {
             const dataUrl = await new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -316,7 +413,7 @@ function App() {
             if (code) {
                 const response = await api.importTOTP(code.data);
                 if (response.data.success) {
-                    setImportStatus({ loading: false, count: response.data.count });
+                    setImportStatus({loading: false, count: response.data.count});
                     message.success(`成功导入 ${response.data.count} 个TOTP`);
                     await loadTOTPs();
                 } else {
@@ -328,7 +425,7 @@ function App() {
         } catch (error) {
             console.error('QR上传错误:', error);
             message.error(error.message || 'TOTP导入过程中发生错误');
-            setImportStatus({ loading: false, count: 0 });
+            setImportStatus({loading: false, count: 0});
         }
         return false;
     };
@@ -367,7 +464,7 @@ function App() {
             render: (text, record) => (
                 <Space>
                     <Text strong>{tokens[record.id] || '未生成'}</Text>
-                    <CountdownTimer onComplete={() => generateToken(record.id)} />
+                    <CountdownTimer onComplete={() => generateToken(record.id)}/>
                 </Space>
             ),
         },
@@ -379,7 +476,7 @@ function App() {
                     <Button onClick={() => generateToken(record.id)} type="primary" size="small">
                         生成令牌
                     </Button>
-                    <Button onClick={() => showQRCode(record)} size="small" icon={<QrcodeOutlined />}>
+                    <Button onClick={() => showQRCode(record)} size="small" icon={<QrcodeOutlined/>}>
                         导出
                     </Button>
                     <Button onClick={() => deleteTOTP(record.id)} danger size="small">
@@ -392,119 +489,203 @@ function App() {
 
     const renderContent = () => (
         <PageContainer>
-            <Card style={{ marginTop: 16 }}>
-                <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                    <div style={{ display: 'flex', flexDirection: isDesktopOrLaptop ? 'row' : 'column', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-                        <Space direction={isDesktopOrLaptop ? 'horizontal' : 'vertical'} style={{ width: isDesktopOrLaptop ? 'auto' : '100%' }}>
-                            <Input
-                                placeholder="用户信息"
-                                value={userInfo}
-                                onChange={(e) => setUserInfo(e.target.value)}
-                                style={{ width: isDesktopOrLaptop ? 200 : '100%' }}
-                            />
-                            <Input
-                                placeholder="密钥"
-                                value={secret}
-                                onChange={(e) => setSecret(formatSecret(e.target.value))}
-                                style={{ width: isDesktopOrLaptop ? 200 : '100%' }}
-                            />
-                            <Button type="primary" onClick={addTOTP} icon={<PlusOutlined />} style={{ width: isDesktopOrLaptop ? 'auto' : '100%' }}>
-                                添加
-                            </Button>
-                        </Space>
-                        <Space direction={isDesktopOrLaptop ? 'horizontal' : 'vertical'} style={{ width: isDesktopOrLaptop ? 'auto' : '100%' }}>
-                            <Switch
-                                checked={syncEnabled}
-                                onChange={handleSyncToggle}
-                                checkedChildren="同步开启"
-                                unCheckedChildren="同步关闭"
-                            />
-                            {syncEnabled && (
-                                <>
-                                    <Button onClick={showBackupModal} icon={<UploadOutlined />} style={{ width: isDesktopOrLaptop ? 'auto' : '100%' }}>
-                                        上传
+            {isLoggedIn ? (
+                // 已登录时显示的内容
+                <Card style={{marginTop: 16}}>
+                    <Space direction="vertical" size="large" style={{
+                        width: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                    }}>
+                        <div style={{flex: 1}}>
+                            <div style={{
+                                display: 'flex',
+                                flexDirection: isDesktopOrLaptop ? 'row' : 'column',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: '16px'
+                            }}>
+                                <Space direction={isDesktopOrLaptop ? 'horizontal' : 'vertical'}
+                                       style={{width: isDesktopOrLaptop ? 'auto' : '100%'}}>
+                                    <Input
+                                        placeholder="用户信息"
+                                        value={userInfo}
+                                        onChange={(e) => setUserInfo(e.target.value)}
+                                        style={{width: isDesktopOrLaptop ? 200 : '100%'}}
+                                    />
+                                    <Input
+                                        placeholder="密钥"
+                                        value={secret}
+                                        onChange={(e) => setSecret(formatSecret(e.target.value))}
+                                        style={{width: isDesktopOrLaptop ? 200 : '100%'}}
+                                    />
+                                    <Button type="primary" onClick={addTOTP} icon={<PlusOutlined/>}
+                                            style={{width: isDesktopOrLaptop ? 'auto' : '100%'}}>
+                                        添加
                                     </Button>
-                                    <Button onClick={showRestoreModal} icon={<SyncOutlined />} style={{ width: isDesktopOrLaptop ? 'auto' : '100%' }}>
-                                        恢复
+                                </Space>
+                                <Space direction={isDesktopOrLaptop ? 'horizontal' : 'vertical'}
+                                       style={{width: isDesktopOrLaptop ? 'auto' : '100%'}}>
+                                    <Switch
+                                        checked={syncEnabled}
+                                        onChange={handleSyncToggle}
+                                        checkedChildren="同步开启"
+                                        unCheckedChildren="同步关闭"
+                                    />
+                                    {syncEnabled && (
+                                        <>
+                                            <Button onClick={showBackupModal} icon={<UploadOutlined/>}
+                                                    style={{width: isDesktopOrLaptop ? 'auto' : '100%'}}>
+                                                上传
+                                            </Button>
+                                            <Button onClick={showRestoreModal} icon={<SyncOutlined/>}
+                                                    style={{width: isDesktopOrLaptop ? 'auto' : '100%'}}>
+                                                恢复
+                                            </Button>
+                                        </>
+                                    )}
+                                    <Button
+                                        onClick={() => Modal.confirm({
+                                            title: '确认清除所有 TOTP？',
+                                            content: '此操作将删除所有已添加的 TOTP，不可恢复。',
+                                            onOk: clearAllTOTPs,
+                                            okText: '确认',
+                                            cancelText: '取消',
+                                        })}
+                                        icon={<ClearOutlined/>}
+                                        danger
+                                        style={{width: isDesktopOrLaptop ? 'auto' : '100%'}}
+                                    >
+                                        清除所有
                                     </Button>
-                                </>
+                                </Space>
+                            </div>
+                            <Dragger {...draggerProps}>
+                                <p className="ant-upload-drag-icon">
+                                    <QrcodeOutlined/>
+                                </p>
+                                <p className="ant-upload-text">点击或拖拽二维码图片到此区域以导入 TOTP</p>
+                            </Dragger>
+                            {importStatus.loading && (
+                                <div style={{textAlign: 'center', marginTop: '10px'}}>
+                                    <Spin tip="正在导入 TOTP..."/>
+                                </div>
                             )}
-                            <Button
-                                onClick={() => Modal.confirm({
-                                    title: '确认清除所有TOTP？',
-                                    content: '此操作将删除所有已添加的TOTP，不可恢复。',
-                                    onOk: clearAllTOTPs,
-                                    okText: '确认',
-                                    cancelText: '取消',
-                                })}
-                                icon={<ClearOutlined />}
-                                danger
-                                style={{ width: isDesktopOrLaptop ? 'auto' : '100%' }}
-                            >
-                                清除所有
-                            </Button>
-                        </Space>
-                    </div>
-                    <Dragger {...draggerProps}>
-                        <p className="ant-upload-drag-icon">
-                            <QrcodeOutlined />
-                        </p>
-                        <p className="ant-upload-text">点击或拖拽二维码图片到此区域以导入TOTP</p>
-                    </Dragger>
-                    {importStatus.loading && (
-                        <div style={{ textAlign: 'center', marginTop: '10px' }}>
-                            <Spin tip="正在导入TOTP..." />
-                        </div>
-                    )}
-                    {importStatus.count > 0 && (
-                        <div style={{ textAlign: 'center', marginTop: '10px' }}>
-                            <Alert
-                                message={`成功导入 ${importStatus.count} 个TOTP`}
-                                type="success"
-                                showIcon
+                            {importStatus.count > 0 && (
+                                <div style={{textAlign: 'center', marginTop: '10px'}}>
+                                    <Alert
+                                        message={`成功导入 ${importStatus.count} 个 TOTP`}
+                                        type="success"
+                                        showIcon
+                                    />
+                                </div>
+                            )}
+                            <Table
+                                columns={columns}
+                                dataSource={totps}
+                                rowKey="id"
+                                locale={{
+                                    emptyText: 'TOTP 列表为空'
+                                }}
+                                pagination={{pageSize: 10}}
+                                scroll={{x: 'max-content'}}
                             />
                         </div>
-                    )}
-                    <Table
-                        columns={columns}
-                        dataSource={totps}
-                        rowKey="id"
-                        locale={{
-                            emptyText: 'TOTP列表为空'
-                        }}
-                        pagination={{ pageSize: 10 }}
-                        scroll={{ x: 'max-content' }}
+                        <div style={{display: 'flex', justifyContent: 'flex-end'}}>
+                            <Button type="danger" onClick={handleLogout} style={{
+                                backgroundColor: '#ff4d4f',
+                                color: 'white',
+                                border: 'none',
+                                marginLeft: '8px'
+                            }}>退出登录</Button>
+                        </div>
+                    </Space>
+                </Card>
+            ) : isRegistering ? (
+                // 注册页面内容
+                <Card style={{
+                    marginTop: 16,
+                    backgroundColor: '#f5f5f5',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    borderRadius: '8px',
+                    maxWidth: '300px',
+                    margin: '0 auto'
+                }}>
+                    <Input
+                        placeholder="用户名"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        style={{width: '100%', marginBottom: '12px'}}
+                        prefix={<UserOutlined style={{color: '#1890ff'}}/>}
                     />
-                </Space>
-            </Card>
+                    <Input.Password
+                        placeholder="密码"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        style={{width: '100%', marginBottom: '16px'}}
+                        prefix={<LockOutlined style={{color: '#1890ff'}}/>}
+                    />
+                    <Button type="primary" style={{width: '100%'}} onClick={handleRegister}>注册</Button>
+                </Card>
+            ) : (
+                // 登录页面内容
+                <Card style={{
+                    marginTop: 16,
+                    backgroundColor: '#f5f5f5',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    borderRadius: '8px',
+                    maxWidth: '300px',
+                    margin: '0 auto'
+                }}>
+                    <Input
+                        placeholder="用户名"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        style={{width: '100%', marginBottom: '12px'}}
+                        prefix={<UserOutlined style={{color: '#1890ff'}}/>}
+                    />
+                    <Input.Password
+                        placeholder="密码"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        style={{width: '100%', marginBottom: '16px'}}
+                        prefix={<LockOutlined style={{color: '#1890ff'}}/>}
+                    />
+                    <Button type="primary" style={{width: '100%'}} onClick={handleLogin}>登录</Button>
+                    <Button style={{width: '100%', marginTop: '8px'}}
+                            onClick={() => setIsRegistering(true)}>注册</Button>
+                </Card>
+            )}
         </PageContainer>
     );
 
     return (
-        <Layout style={{ minHeight: '100vh' }}>
+        <Layout style={{minHeight: '100vh'}}>
             {isDesktopOrLaptop ? (
                 <>
-                    <Header style={{ display: 'flex', alignItems: 'center' }}>
-                        <div className="logo" style={{ color: 'white', fontSize: '18px', fontWeight: 'bold', marginRight: '20px' }}>
+                    <Header style={{display: 'flex', alignItems: 'center'}}>
+                        <div className="logo"
+                             style={{color: 'white', fontSize: '18px', fontWeight: 'bold', marginRight: '20px'}}>
                             TOTP Token Manager
                         </div>
-                        <Menu theme="dark" mode="horizontal" defaultSelectedKeys={['1']} style={{ flex: 1 }}>
+                        <Menu theme="dark" mode="horizontal" defaultSelectedKeys={['1']} style={{flex: 1}}>
                             <Menu.Item key="1">主页</Menu.Item>
                         </Menu>
                     </Header>
-                    <Content style={{ padding: '0 50px' }}>
+                    <Content style={{padding: '0 50px'}}>
                         {renderContent()}
                     </Content>
                 </>
             ) : (
                 <>
-                    <Header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div className="logo" style={{ color: 'white', fontSize: '16px', fontWeight: 'bold' }}>
+                    <Header style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        <div className="logo" style={{color: 'white', fontSize: '16px', fontWeight: 'bold'}}>
                             TOTP Token Manager
                         </div>
-                        <Button type="primary" onClick={() => setDrawerVisible(true)} icon={<MenuOutlined />} />
+                        <Button type="primary" onClick={() => setDrawerVisible(true)} icon={<MenuOutlined/>}/>
                     </Header>
-                    <Content style={{ padding: '16px' }}>
+                    <Content style={{padding: '16px'}}>
                         {renderContent()}
                     </Content>
                     <Drawer
@@ -514,14 +695,14 @@ function App() {
                         open={drawerVisible}
                     >
                         <Menu mode="inline" defaultSelectedKeys={['1']}>
-                            <Menu.Item key="1" icon={<QrcodeOutlined />}>
+                            <Menu.Item key="1" icon={<QrcodeOutlined/>}>
                                 TOTP管理
                             </Menu.Item>
                         </Menu>
                     </Drawer>
                 </>
             )}
-            <Footer style={{ textAlign: 'center' }}>
+            <Footer style={{textAlign: 'center'}}>
                 TOTP Token Manager ©{new Date().getFullYear()} Created by Lones
             </Footer>
 
@@ -570,8 +751,8 @@ function App() {
                 footer={null}
             >
                 {isLoadingBackups ? (
-                    <div style={{ textAlign: 'center', padding: '20px' }}>
-                        <Spin tip="加载备份版本中..." />
+                    <div style={{textAlign: 'center', padding: '20px'}}>
+                        <Spin tip="加载备份版本中..."/>
                     </div>
                 ) : backupVersions.length > 0 ? (
                     <List
@@ -586,7 +767,7 @@ function App() {
                                         okText="是"
                                         cancelText="否"
                                     >
-                                        <Button danger icon={<DeleteOutlined />}>删除</Button>
+                                        <Button danger icon={<DeleteOutlined/>}>删除</Button>
                                     </Popconfirm>
                                 ]}
                             >

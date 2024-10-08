@@ -12,7 +12,7 @@
 2. 在Cloudflare Workers上创建一个新的Worker：
    - 访问[Cloudflare Workers](https://dash.cloudflare.com/workers)。
    - 创建一个kv空间，名称为`TOTP_STORE`
-   - 创建一个新的Worker，并选择“Pages”类型。fork[前端仓库](https://github.com/lonestech/totppages-manager-frontend)使用Pages链接部署前端。
+   - 创建一个新的Worker，并选择“Pages”类型。fork[前端仓库](https://github.com/lonestech/totppages-manager-frontend)使用Pages链接部署前端。构建命令`npm run build`,构建目录`build`，环境变量``
    - 设置自定义域名
 3. 在GitHub上创建一个OAuth应用：
    - 访问[GitHub OAuth Apps](https://github.com/settings/applications/new)。
